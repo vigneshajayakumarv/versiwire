@@ -1,0 +1,685 @@
+{
+  "name": "Versiwire - Tech News to Instagram",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9,17 * * *"
+            }
+          ]
+        }
+      },
+      "id": "aef1679f-57db-4a15-b927-1a4983b24b42",
+      "name": "Daily 9AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2400,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://techcrunch.com/feed/",
+        "options": {}
+      },
+      "id": "cbd12c66-0037-4baa-8b3c-a00aaf4f3936",
+      "name": "RSS TechCrunch",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.1,
+      "position": [
+        -2160,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.theverge.com/rss/index.xml",
+        "options": {}
+      },
+      "id": "9aaf40f9-8512-4700-af36-9290e2ab3ed1",
+      "name": "RSS The Verge",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.1,
+      "position": [
+        -2160,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://feeds.arstechnica.com/arstechnica/technology-lab",
+        "options": {}
+      },
+      "id": "a9a281a8-ddd7-47a6-a7ca-d9f65d729f96",
+      "name": "RSS Ars Technica",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.1,
+      "position": [
+        -2160,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "2d26a8f1-6b1e-4d3e-84fa-a9076db7719a",
+      "name": "Merge Feeds",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -1920,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst postedLinks = staticData.postedLinks || [];\nconst postedHeadlines = (staticData.postedHeadlines || []).map(h => (h || '').toLowerCase().trim());\n\nconst HOURS = 15; // window: covers overnight gap before the 9am run\nconst cutoff = Date.now() - HOURS * 60 * 60 * 1000;\n\nconst stories = $input.all()\n  .filter(i => new Date(i.json.pubDate || i.json.isoDate || 0).getTime() > cutoff)\n  // block anything whose article title matches a headline we've already posted\n  .filter(i => {\n    const title = (i.json.title || '').toLowerCase().trim();\n    return title && !postedHeadlines.includes(title);\n  })\n  // secondary guard: block by exact link if it happens to match a stored link\n  .filter(i => !postedLinks.includes(i.json.link))\n  .map(i => ({\n    title: i.json.title,\n    snippet: (i.json.contentSnippet || i.json.content || '').replace(/<[^>]*>/g, '').slice(0, 300),\n    link: i.json.link,\n    source: (i.json.link || '').includes('techcrunch') ? 'TechCrunch'\n          : (i.json.link || '').includes('theverge') ? 'The Verge'\n          : 'Ars Technica'\n  }));\n\nif (stories.length === 0) {\n  return [{ json: { stories: [], prompt: '', empty: true } }];\n}\n\nconst avoid = (staticData.postedHeadlines || []).slice(-10).map(h => `- ${h}`).join('\\n');\n\nconst prompt = `You are a tech news analyst. Below are recent tech headlines from TechCrunch, The Verge, and Ars Technica.\n\n${JSON.stringify(stories, null, 2)}\n\nALREADY POSTED recently (do NOT pick these stories or the same news covered by another outlet):\n${avoid || '- none'}\n\nTasks:\n1. Pick the single most significant tech INNOVATION from the list (new product, breakthrough, launch - not opinion pieces, layoffs, or lawsuits). It must be a DIFFERENT story from the already-posted list above.\n2. Legitimacy check: score 1-10. Score 8+ only if the story appears in 2 or more of the sources OR is from an official company announcement. Flag anything that smells like rumor or leak.\n3. category: the single tech beat this falls under, ONE or TWO words, uppercase-friendly (e.g. AI, HARDWARE, SECURITY, ROBOTICS, SPACE).\n4. Write an Instagram caption: hook line, 2-3 sentence summary in plain language, credit line 'Source: <outlet>', 5 relevant hashtags. Max 3 emojis.\n\nRespond ONLY with raw JSON, no markdown fences:\n{\"category\": \"\", \"headline\": \"\", \"summary\": \"\", \"sources\": [], \"source_link\": \"\", \"legit_score\": 0, \"legit_reason\": \"\", \"ig_caption\": \"\"}`;\n\nreturn [{ json: { stories, prompt, empty: false } }];"
+      },
+      "id": "345c927e-2c13-418b-a95c-6ea7a5f12d09",
+      "name": "Filter & Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1680,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.empty }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "75e37185-b993-4c2e-bf7e-2f62a2512e2b",
+      "name": "Has Stories?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1440,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1024, messages: [{ role: 'user', content: $json.prompt }] }) }}",
+        "options": {}
+      },
+      "id": "813adeb9-24cc-43bf-9027-593bc2f668c8",
+      "name": "Claude - Analyze News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1200,
+        96
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dtgPrlFa7bKBYBKG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '';\nconst clean = raw.replace(/```json|```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(clean);\n} catch (e) {\n  throw new Error('Claude did not return valid JSON: ' + raw.slice(0, 200));\n}\n\nreturn [{ json: parsed }];"
+      },
+      "id": "a0dbb945-75ab-4dc0-ae53-a79398826851",
+      "name": "Parse Claude Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.legit_score }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "id": "93a53e53-a11f-4b00-b2fd-0b7f25238862"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f6d6588c-b051-4f12-9388-30280c3830f2",
+      "name": "Legit Score >= 8?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -720,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "vigneshajayakumarv@gmail.com",
+        "subject": "=IG Post Approval: {{ $json.headline }}",
+        "message": "=<h3>{{ $json.headline }}</h3>\n<p><b>Legit score:</b> {{ $json.legit_score }}/10 — {{ $json.legit_reason }}</p>\n<p><b>Sources:</b> {{ $json.sources.join(', ') }}</p>\n<p><b>Link:</b> <a href=\"{{ $json.source_link }}\">{{ $json.source_link }}</a></p>\n<hr>\n<p><b>Caption:</b></p>\n<p>{{ $json.ig_caption }}</p>",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double"
+          }
+        },
+        "options": {
+          "limitWaitTime": {
+            "values": {
+              "resumeAmount": 30,
+              "resumeUnit": "minutes"
+            }
+          }
+        }
+      },
+      "id": "058036f2-4f3b-4ba6-8376-34daac3c4903",
+      "name": "Gmail - Send & Wait Approval",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -464,
+        -96
+      ],
+      "webhookId": "REPLACE_ON_IMPORT",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "c1On5wFZNeMXRmRi",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f0a53372-215a-4f89-82ff-b37d26e0eab8",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v22.0/17841448915073130/media",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "image_url",
+              "value": "={{ $json.data.url }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $('Parse Claude Response').item.json.ig_caption }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "84677517-45b2-44b3-a223-f342ab0f18e4",
+      "name": "IG - Create Media Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        672,
+        -336
+      ],
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "ndqf1Ae4mBjK476t",
+          "name": "Instagram Cred"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "id": "f4956a38-8cb2-4632-940f-5872dc2f8afe",
+      "name": "Wait 30s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        912,
+        -336
+      ],
+      "webhookId": "REPLACE_ON_IMPORT_2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v22.0/17841448915073130/media_publish",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "creation_id",
+              "value": "={{ $('IG - Create Media Container').item.json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1e2262ad-930a-4000-abf4-1aa42a1d052d",
+      "name": "IG - Publish Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1136,
+        -336
+      ],
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "ndqf1Ae4mBjK476t",
+          "name": "Instagram Cred"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6edb12f7-5db2-40ab-b05e-8fae74568167",
+              "name": "html",
+              "value": "=<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><style>@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Space+Mono:wght@400;700&display=swap');:root{--ink:#0B1416;--panel:#0F1E21;--signal:#2BD4BE;--wire:#3C5C5A;--paper:#EAF4F2;--dim:#8AA6A2;--amber:#F5A623}*{margin:0;padding:0;box-sizing:border-box}html,body{width:1080px;height:1080px}body{background:var(--ink);color:var(--paper);font-family:'Space Grotesk',sans-serif;position:relative;overflow:hidden}.glow{position:absolute;width:900px;height:900px;left:-120px;top:180px;background:radial-gradient(circle at center,rgba(43,212,190,0.14),transparent 62%);filter:blur(10px);pointer-events:none}.scan{position:absolute;inset:0;background:repeating-linear-gradient(to bottom,rgba(255,255,255,0.014) 0px,rgba(255,255,255,0.014) 1px,transparent 1px,transparent 4px);pointer-events:none}.card{position:relative;width:100%;height:100%;padding:84px 88px;display:flex;flex-direction:column}.masthead{display:flex;align-items:center;justify-content:space-between}.brand{display:flex;align-items:center;gap:16px;font-family:'Space Mono',monospace;font-weight:700;font-size:23px;letter-spacing:0.22em;color:var(--paper)}.pulse{width:13px;height:13px;border-radius:50%;background:var(--signal);box-shadow:0 0 0 5px rgba(43,212,190,0.18),0 0 22px rgba(43,212,190,0.9)}.brand .tick{color:var(--signal)}.monogram{width:60px;height:60px;border:2px solid var(--wire);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:30px;color:var(--signal)}.signal-line{height:2px;background:linear-gradient(to right,var(--signal) 0%,var(--signal) 22%,var(--wire) 22%,var(--wire) 100%);margin-top:26px}.body{flex:1;display:flex;flex-direction:column;justify-content:center;padding:8px 0}.category{font-family:'Space Mono',monospace;font-weight:700;font-size:26px;letter-spacing:0.18em;color:var(--signal);margin-bottom:26px;text-transform:uppercase}.headline{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:78px;line-height:1.04;letter-spacing:-0.015em;color:var(--paper);display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}.foot-line{height:1px;background:var(--wire);margin-bottom:24px}.foot{display:flex;align-items:center;justify-content:space-between;font-family:'Space Mono',monospace;font-size:22px;letter-spacing:0.08em;color:var(--dim)}.foot .src{color:var(--paper)}.foot .src b{color:var(--signal);font-weight:700}.verified{display:flex;align-items:center;gap:9px;color:var(--amber);font-weight:700;letter-spacing:0.14em}.verified .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 12px rgba(245,166,35,0.8)}</style></head><body><div class=\"glow\"></div><div class=\"scan\"></div><div class=\"card\"><div class=\"masthead\"><div class=\"brand\"><span class=\"pulse\"></span>VERSIWIRE<span class=\"tick\">&#9656;</span>TECH DISPATCH</div><div class=\"monogram\">V</div></div><div class=\"signal-line\"></div><div class=\"body\"><div class=\"category\">{{ $('Parse Claude Response').item.json.category }}</div><div class=\"headline\">{{ $('Parse Claude Response').item.json.headline }}</div></div><div class=\"foot-line\"></div><div class=\"foot\"><div class=\"src\">SOURCE: <b>{{ $('Parse Claude Response').item.json.sources.join(' & ') }}</b></div><div class=\"verified\"><span class=\"dot\"></span>VERIFIED</div><div class=\"date\">{{ $now.format('yyyy·MM·dd') }}</div></div></div></body></html>",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -16,
+        -336
+      ],
+      "id": "073b32c7-1114-4177-98ee-0b3fdb15cebb",
+      "name": "Build Card HTML"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://browserless:3000/screenshot?token=versiwire123",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"html\": {{ JSON.stringify($json.html) }},\n  \"viewport\": { \"width\": 1080, \"height\": 1080 },\n  \"options\": { \"type\": \"jpeg\", \"quality\": 90 }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        -336
+      ],
+      "id": "1623ed16-4ec8-460d-8d2a-ed807b973865",
+      "name": "HTTP To Binary"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.imgbb.com/1/upload",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "image",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        432,
+        -336
+      ],
+      "id": "1fae25c6-8a74-49aa-8dce-3a27a109c338",
+      "name": "Upload to imgbb",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "ERIDyH5dqz6IEb4a",
+          "name": "imgbb key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst parsed = $('Parse Claude Response').item.json;\n\nstaticData.postedLinks = [...(staticData.postedLinks || []), parsed.source_link].slice(-50);\nstaticData.postedHeadlines = [...(staticData.postedHeadlines || []), parsed.headline].slice(-20);\n\nreturn [{ json: { recorded: true, headline: parsed.headline } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        -336
+      ],
+      "id": "6e35cfcc-b803-4f99-a735-3a9ed57bd02d",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily 9AM Trigger": {
+      "main": [
+        [
+          {
+            "node": "RSS TechCrunch",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS The Verge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS Ars Technica",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS TechCrunch": {
+      "main": [
+        [
+          {
+            "node": "Merge Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS The Verge": {
+      "main": [
+        [
+          {
+            "node": "Merge Feeds",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "RSS Ars Technica": {
+      "main": [
+        [
+          {
+            "node": "Merge Feeds",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Feeds": {
+      "main": [
+        [
+          {
+            "node": "Filter & Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Has Stories?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Stories?": {
+      "main": [
+        [
+          {
+            "node": "Claude - Analyze News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude - Analyze News": {
+      "main": [
+        [
+          {
+            "node": "Parse Claude Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Claude Response": {
+      "main": [
+        [
+          {
+            "node": "Legit Score >= 8?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Legit Score >= 8?": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Send & Wait Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Send & Wait Approval": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Build Card HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG - Create Media Container": {
+      "main": [
+        [
+          {
+            "node": "Wait 30s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 30s": {
+      "main": [
+        [
+          {
+            "node": "IG - Publish Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Card HTML": {
+      "main": [
+        [
+          {
+            "node": "HTTP To Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP To Binary": {
+      "main": [
+        [
+          {
+            "node": "Upload to imgbb",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to imgbb": {
+      "main": [
+        [
+          {
+            "node": "IG - Create Media Container",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG - Publish Post": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "590acff5-18d1-4049-887a-c187179344df",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "75386308eb79dce290210253c2283eb42ceba25647850350b122126e1c4ff43d"
+  },
+  "nodeGroups": [],
+  "id": "kolZmgyCMRNUyIfR",
+  "tags": []
+}

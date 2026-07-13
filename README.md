@@ -21,18 +21,18 @@ The Instagram account is just the visible output. The engineering is in the gove
 
 ## Preview
 
+
 **Generated card** — autonomously produced, human-approved before publishing:
 
-![Versiwire card](docs/screenshots/card.png)
+<img src="docs/screenshots/card.png" width="400" alt="Versiwire generated card">
 
 **Approval gate** — the human-in-the-loop step:
 
-![Approval email](docs/screenshots/approval-email.png)
+<img src="docs/screenshots/approval-email.png" width="500" alt="Approval email with Approve/Decline">
 
 **Live on Instagram:**
 
-![Published post](docs/screenshots/published-post.png)
-
+<img src="docs/screenshots/published-post.png" width="400" alt="Published post on Instagram">
 ---
 
 ## Architecture
